@@ -1,13 +1,15 @@
+
 class Tag:
-    def __init__(self, tag=None, attributes={}, content=[]):
+    def __init__(self, tag=None, attributes=None, content=None):
         self.tag = tag
-        self.content = content
-        self.attributes = attributes
+        self.content = content if content is not None else []
+        self.attributes = attributes if attributes is not None else {}
 
     def __str__(self):
-        return f"{self.tag} " + " ".join(self.content)
+        return f"{self.tag} " + " ".join(map(str, self.content))
 
     __repr__ = __str__
+
 
 class Uparses:
     def __init__(self, html=None):
@@ -54,14 +56,18 @@ class Uparses:
             else:
                 attributes[lw] = w
 
-        without_content = without_content or tg in ["meta", "link", "!DOCTYPE", "noscript", "img"]
-        is_closed = '/' in tg
+        without_content = without_content or s.rstrip().endswith("/") or tg.rstrip("/") in [
+            "meta", "link", "!DOCTYPE", "img", "br", "hr", "input"
+        ]
+        is_closed = tg.startswith("/")
+        tg = tg.rstrip("/")
         return tg, attributes, is_closed, without_content
 
     def parse(self, html=None):
-
-        if html:
+        if html is not None:
             self.html = html
+
+        self.tags, self.ids, self.classes = {}, {}, {}
 
         if self.html:
             stack = [[]]
@@ -72,7 +78,11 @@ class Uparses:
                 a = self.html.find("<", l)
                 if a == -1:
                     break
-                b = self.html.find(">", l)
+
+                b = self.html.find(">", a + 1)
+                if b == -1:
+                    break
+
                 s = self.html[a+1:b]
 
                 ss = self.html[l:a].strip()
@@ -126,7 +136,17 @@ class Uparses:
 
                 l = b + 1
 
-        self.root = stack[0]
+            ss = self.html[l:].strip()
+            if ss:
+                stack[-1].append(ss)
+
+            while len(stack) > 1:
+                content = stack.pop()
+                stack[-1][-1].content = content
+
+            self.root = stack[0]
+        else:
+            self.root = []
 
     def get_by_tag(self, tag):
         if tag in self.tags.keys():
@@ -135,14 +155,14 @@ class Uparses:
             return None
 
     def get_by_class(self, cl):
-        if cl in self.classes.keys():
-            return self.classes[cl]
-        else:
-            return None
+        return [
+            o for name, tags in self.classes.items()
+            if cl in name.split()
+            for o in tags
+        ] or None
 
     def get_by_id(self, id):
         if id in self.ids.keys():
             return self.ids[id]
         else:
             return None
-
